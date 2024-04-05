@@ -1,6 +1,9 @@
 import os
+import re
 import datetime
 import json
+import pandas as pd
+from pandas.errors import EmptyDataError
 
 class ShortMemory():
     def __init__(self):
@@ -15,30 +18,34 @@ class ShortMemory():
         self.currfile = os.path.join(self.log, f"{datetime.datetime.now().strftime('%Y%m%d')}.hap.log")
 
         if not os.path.exists(self.currfile):
-            with open(os.path.join(self.log, self.currfile), 'w') as cf:
-                pass 
-        else:
-            print(f"\n[SMEMORY] {datetime.datetime.now()} {self.currfile} exists already!")
+            pd.DataFrame(columns=['Timestamp', 'Prompt', 'Response']).to_csv(self.currfile, mode='w', header=True, index=False)
+    
+    def clean_text(self, text): 
+        ctext = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+        ctext = re.sub(' +', ' ', ctext) 
+        return ctext
     
     def log_interaction(self, query: str, response: str):
-        log_entry = {
-            "timestamp": datetime.datetime.now().isoformat(), 
-            "query": query,
-            "response": response
-        }
-        with open(self.currfile, "a") as lf:
-            lf.write(json.dumps(log_entry) + "\n")
+        logdf = pd.DataFrame([(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), self.clean_text(str(query)), self.clean_text(response))], columns=['Timestamp', 'Prompt', 'Response'])
+        logdf.to_csv(self.currfile, mode='a', header=False, index=False)
     
     def retrieve(self):
-        interactions = []
-        with open(self.currfile, 'r') as file:
-            for line in file:
-                try:
-                    interaction = json.loads(line)
-                    interactions.append(interaction)
-                except json.JSONDecodeError:
-                    print("Error decoding JSON from:", line)
-        return interactions
+        try:
+            df = pd.read_csv(self.currfile)
+            formatted_text = ''
+            if not df.empty:
+                for index, row in df.iterrows():
+                    text_chunk = f"{row['Timestamp']}: Prompt: {row['Prompt']} - Response: {row['Response']}\n"
+                    formatted_text += text_chunk
+                return formatted_text
+            else:
+                return ""
+        except EmptyDataError:
+            return ""
+    
+if __name__ == "__main__":
+    memory = ShortMemory()
+    memory.retrieve()
 
 
 
